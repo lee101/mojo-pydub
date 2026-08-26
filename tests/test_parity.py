@@ -57,6 +57,22 @@ def test_peak_rms_and_levels_match_pydub(width):
 
 
 @pytest.mark.parametrize("width", [1, 2, 4])
+def test_peak_simd_and_tail_handle_minimum_sample(width):
+    minimum = -(1 << (width * 8 - 1))
+    values = [0] * 13
+    values[3] = minimum
+    ours, upstream = pair(values, width=width)
+    assert ours.max == upstream.max == -minimum
+
+
+def test_native_gain_and_overlay_outputs_are_immutable_bytes():
+    base, _ = random_pair(257, width=2)
+    over, _ = random_pair(257, width=2)
+    assert type(base.apply_gain(-3.5).raw_data) is bytes
+    assert type(base.overlay(over).raw_data) is bytes
+
+
+@pytest.mark.parametrize("width", [1, 2, 4])
 def test_normalize_matches_pydub(width):
     ours, upstream = random_pair(10001, width=width)
     assert_parity(ours.normalize(headroom=0.25), upstream.normalize(headroom=0.25))

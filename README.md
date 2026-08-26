@@ -90,22 +90,26 @@ faster.
 
 | operation | mojo-pydub | pydub | speedup |
 |---|---:|---:|---:|
-| apply_gain, 60 s stereo | 22.03 ms | 22.42 ms | 1.02x |
-| normalize, 60 s stereo | 25.50 ms | 44.88 ms | 1.76x |
-| overlay, 60 s + 30 s stereo | 24.74 ms | 31.78 ms | 1.28x |
-| fade_in, 10 s stereo | 3.12 ms | 51.35 ms | 16.45x |
-| pan, 60 s stereo | 17.63 ms | 199.55 ms | 11.32x |
-| low_pass_filter, 10 s stereo | 3.63 ms | 592.59 ms | 163.19x |
-| high_pass_filter, 10 s stereo | 3.33 ms | 826.04 ms | 248.32x |
-| speedup 1.5x, 60 s stereo | 362.64 ms | 1427.96 ms | 3.94x |
+| apply_gain, 60 s stereo | 5.81 ms | 19.64 ms | 3.38x |
+| normalize, 60 s stereo | 9.67 ms | 43.88 ms | 4.54x |
+| overlay, 60 s + 30 s stereo | 6.89 ms | 25.20 ms | 3.66x |
+| fade_in, 10 s stereo | 3.17 ms | 32.04 ms | 10.10x |
+| pan, 60 s stereo | 15.35 ms | 130.78 ms | 8.52x |
+| low_pass_filter, 10 s stereo | 3.01 ms | 349.39 ms | 115.88x |
+| high_pass_filter, 10 s stereo | 3.53 ms | 782.96 ms | 221.68x |
+| speedup 1.5x, 60 s stereo | 335.60 ms | 1254.22 ms | 3.74x |
 
-Gain and mixing use float64-width SIMD with scalar remainder handling. Buffers
-of at least 1,048,576 samples are split into independent 262,144-sample chunks
-for CPU parallelism; smaller inputs remain serial. The Python binding allocates
-a writable output buffer, keeps it alive for the native call, and converts it to
-immutable `bytes` afterward. Overlay copies the base once and mixes into that
-result instead of slicing and joining large temporary buffers. No GPU path is
-included.
+Gain, mixing, and peak detection use float64-width SIMD with scalar remainder
+handling. Gain and mixing buffers of at least 1,048,576 samples are split into
+independent 262,144-sample chunks across at most eight CPU workers; smaller
+inputs remain serial. The Python binding allocates the immutable result buffer
+directly and fills it during the native call, avoiding an intermediate writable
+buffer and final copy. Overlay copies the base once and mixes into that result
+instead of slicing and joining large temporary buffers.
+
+No GPU path is included. These kernels perform fewer than two arithmetic
+operations per byte moved and are memory-bandwidth bound, so device transfer
+and launch overhead would make a GPU path inappropriate.
 
 To reproduce:
 

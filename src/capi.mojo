@@ -1,13 +1,15 @@
 """Integer PCM audio kernels exported through a stable C ABI."""
 
+from max.algorithm import parallelize
 from std.math import floor, sqrt
-from std.sys.info import simd_width_of
+from std.sys.info import num_physical_cores, simd_width_of
 
 comptime I8Ptr = UnsafePointer[Int8, AnyOrigin[mut=True]]
 comptime I16Ptr = UnsafePointer[Int16, AnyOrigin[mut=True]]
 comptime I32Ptr = UnsafePointer[Int32, AnyOrigin[mut=True]]
 comptime PARALLEL_THRESHOLD = 1_048_576
 comptime PARALLEL_CHUNK = 262_144
+comptime MAX_WORKERS = 8
 
 
 def clip8(value: Int) -> Int8:
@@ -115,8 +117,10 @@ def mpd_gain(
             )
 
     if n >= PARALLEL_THRESHOLD:
-        for chunk in range((n + PARALLEL_CHUNK - 1) // PARALLEL_CHUNK):
-            worker(chunk)
+        var chunks = (n + PARALLEL_CHUNK - 1) // PARALLEL_CHUNK
+        parallelize[worker](
+            chunks, min(chunks, min(MAX_WORKERS, num_physical_cores()))
+        )
     elif width == 1:
         gain8(
             I8Ptr(unsafe_from_address=src_addr),
@@ -267,8 +271,10 @@ def mpd_mix(
             )
 
     if n >= PARALLEL_THRESHOLD:
-        for chunk in range((n + PARALLEL_CHUNK - 1) // PARALLEL_CHUNK):
-            worker(chunk)
+        var chunks = (n + PARALLEL_CHUNK - 1) // PARALLEL_CHUNK
+        parallelize[worker](
+            chunks, min(chunks, min(MAX_WORKERS, num_physical_cores()))
+        )
     elif width == 1:
         mix8(
             I8Ptr(unsafe_from_address=a_addr),
@@ -298,29 +304,65 @@ def mpd_mix(
         )
 
 
+def peak8(src: I8Ptr, n: Int) -> Int64:
+    comptime W = simd_width_of[DType.float64]()
+    var peak = Int64(0)
+    var i = 0
+    var vector_end = n - n % W
+    while i < vector_end:
+        var values = src.load[width=W](i).cast[DType.float64]()
+        peak = max(peak, Int64(max(values, -values).reduce_max()))
+        i += W
+    while i < n:
+        var value = Int64(src[i])
+        peak = max(peak, -value if value < 0 else value)
+        i += 1
+    return peak
+
+
+def peak16(src: I16Ptr, n: Int) -> Int64:
+    comptime W = simd_width_of[DType.float64]()
+    var peak = Int64(0)
+    var i = 0
+    var vector_end = n - n % W
+    while i < vector_end:
+        var values = src.load[width=W](i).cast[DType.float64]()
+        peak = max(peak, Int64(max(values, -values).reduce_max()))
+        i += W
+    while i < n:
+        var value = Int64(src[i])
+        peak = max(peak, -value if value < 0 else value)
+        i += 1
+    return peak
+
+
+def peak32(src: I32Ptr, n: Int) -> Int64:
+    comptime W = simd_width_of[DType.float64]()
+    var peak = Int64(0)
+    var i = 0
+    var vector_end = n - n % W
+    while i < vector_end:
+        var values = src.load[width=W](i).cast[DType.float64]()
+        peak = max(peak, Int64(max(values, -values).reduce_max()))
+        i += W
+    while i < n:
+        var value = Int64(src[i])
+        peak = max(peak, -value if value < 0 else value)
+        i += 1
+    return peak
+
+
 @export("mpd_peak")
 def mpd_peak(src_addr: Int, n: Int, width: Int) abi("C") -> Int64:
     if src_addr == 0 or n <= 0:
         return 0
-    if width != 1 and width != 2 and width != 4:
-        return 0
-    var peak = Int64(0)
     if width == 1:
-        var src = I8Ptr(unsafe_from_address=src_addr)
-        for i in range(n):
-            var value = Int64(src[i])
-            peak = max(peak, -value if value < 0 else value)
-    elif width == 2:
-        var src = I16Ptr(unsafe_from_address=src_addr)
-        for i in range(n):
-            var value = Int64(src[i])
-            peak = max(peak, -value if value < 0 else value)
-    else:
-        var src = I32Ptr(unsafe_from_address=src_addr)
-        for i in range(n):
-            var value = Int64(src[i])
-            peak = max(peak, -value if value < 0 else value)
-    return peak
+        return peak8(I8Ptr(unsafe_from_address=src_addr), n)
+    if width == 2:
+        return peak16(I16Ptr(unsafe_from_address=src_addr), n)
+    if width == 4:
+        return peak32(I32Ptr(unsafe_from_address=src_addr), n)
+    return 0
 
 
 @export("mpd_rms")

@@ -39,6 +39,10 @@ _bytes_address = ctypes.pythonapi.PyBytes_AsString
 _bytes_address.argtypes = [ctypes.py_object]
 _bytes_address.restype = ctypes.c_void_p
 
+_new_bytes = ctypes.pythonapi.PyBytes_FromStringAndSize
+_new_bytes.argtypes = [ctypes.c_void_p, ctypes.c_ssize_t]
+_new_bytes.restype = ctypes.py_object
+
 
 def lib() -> ctypes.CDLL:
     global _library
@@ -94,34 +98,26 @@ def bytes_address(data: bytes) -> int:
     return int(pointer)
 
 
-def output_buffer(size: int) -> tuple[bytearray, ctypes.Array]:
+def output_buffer(size: int) -> tuple[bytes, int]:
     if size <= 0:
         raise ValueError("native output size must be positive")
-    data = bytearray(size)
-    view = (ctypes.c_ubyte * size).from_buffer(data)
-    return data, view
-
-
-def output_address(view: ctypes.Array) -> int:
-    pointer = ctypes.addressof(view)
-    if not pointer:
-        raise RuntimeError("CPython did not provide a writable buffer address")
-    return pointer
+    data = _new_bytes(None, size)
+    return data, bytes_address(data)
 
 
 def gain(data: bytes, width: int, factor: float) -> bytes:
     source = samples(data, width)
     if not data:
         return b""
-    destination, destination_view = output_buffer(len(data))
+    destination, destination_address = output_buffer(len(data))
     lib().mpd_gain(
         bytes_address(data),
-        output_address(destination_view),
+        destination_address,
         source.size,
         width,
         factor,
     )
-    return bytes(destination)
+    return destination
 
 
 def mix(a: bytes, b: bytes, width: int, a_factor: float = 1.0) -> bytes:
@@ -131,17 +127,17 @@ def mix(a: bytes, b: bytes, width: int, a_factor: float = 1.0) -> bytes:
         raise ValueError("mix buffers must have equal sample counts")
     if not a:
         return b""
-    destination, destination_view = output_buffer(len(a))
+    destination, destination_address = output_buffer(len(a))
     lib().mpd_mix(
         bytes_address(a),
         bytes_address(b),
-        output_address(destination_view),
+        destination_address,
         a_samples.size,
         width,
         a_factor,
     )
     assert a_samples.size == b_samples.size
-    return bytes(destination)
+    return destination
 
 
 def overlay(
@@ -158,8 +154,7 @@ def overlay(
         raise ValueError("overlay position must be a non-negative sample boundary")
     if not base or not over or not times or position >= len(base):
         return base
-    destination, destination_view = output_buffer(len(base))
-    destination_address = output_address(destination_view)
+    destination, destination_address = output_buffer(len(base))
     base_address = bytes_address(base)
     over_address = bytes_address(over)
     ctypes.memmove(destination_address, base_address, len(base))
@@ -175,7 +170,7 @@ def overlay(
         )
         position += size
         times -= 1
-    return bytes(destination)
+    return destination
 
 
 def peak(data: bytes, width: int) -> int:
