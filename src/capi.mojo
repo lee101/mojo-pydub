@@ -1,6 +1,5 @@
 """Integer PCM audio kernels exported through a stable C ABI."""
 
-from std.algorithm import sync_parallelize
 from std.math import floor, sqrt
 from std.sys.info import simd_width_of
 
@@ -86,7 +85,7 @@ def mpd_gain(
         return
     if width != 1 and width != 2 and width != 4:
         return
-    @parameter
+    @__parameter
     def worker(chunk: Int):
         var start = chunk * PARALLEL_CHUNK
         var end = min(n, start + PARALLEL_CHUNK)
@@ -116,7 +115,8 @@ def mpd_gain(
             )
 
     if n >= PARALLEL_THRESHOLD:
-        sync_parallelize[worker]((n + PARALLEL_CHUNK - 1) // PARALLEL_CHUNK)
+        for chunk in range((n + PARALLEL_CHUNK - 1) // PARALLEL_CHUNK):
+            worker(chunk)
     elif width == 1:
         gain8(
             I8Ptr(unsafe_from_address=src_addr),
@@ -234,7 +234,7 @@ def mpd_mix(
         return
     if width != 1 and width != 2 and width != 4:
         return
-    @parameter
+    @__parameter
     def worker(chunk: Int):
         var start = chunk * PARALLEL_CHUNK
         var end = min(n, start + PARALLEL_CHUNK)
@@ -267,7 +267,8 @@ def mpd_mix(
             )
 
     if n >= PARALLEL_THRESHOLD:
-        sync_parallelize[worker]((n + PARALLEL_CHUNK - 1) // PARALLEL_CHUNK)
+        for chunk in range((n + PARALLEL_CHUNK - 1) // PARALLEL_CHUNK):
+            worker(chunk)
     elif width == 1:
         mix8(
             I8Ptr(unsafe_from_address=a_addr),
