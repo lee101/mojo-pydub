@@ -121,7 +121,7 @@ def test_mix_simd_remainder_matches_pydub(width):
 
 
 @pytest.mark.parametrize("samples", [1_048_575, 1_048_579])
-def test_gain_and_overlay_match_across_parallel_threshold_with_simd_tail(samples):
+def test_gain_and_overlay_match_with_simd_tail(samples):
     ours, upstream = random_pair(samples, width=2, frame_rate=1000)
     over, over_ref = random_pair(samples, width=2, frame_rate=1000)
     assert_parity(ours.apply_gain(-3.5), upstream.apply_gain(-3.5))

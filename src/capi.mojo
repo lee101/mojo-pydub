@@ -1,15 +1,11 @@
 """Integer PCM audio kernels exported through a stable C ABI."""
 
-from max.algorithm import parallelize
 from std.math import floor, sqrt
-from std.sys.info import num_physical_cores, simd_width_of
+from std.sys.info import simd_width_of
 
 comptime I8Ptr = UnsafePointer[Int8, AnyOrigin[mut=True]]
 comptime I16Ptr = UnsafePointer[Int16, AnyOrigin[mut=True]]
 comptime I32Ptr = UnsafePointer[Int32, AnyOrigin[mut=True]]
-comptime PARALLEL_THRESHOLD = 1_048_576
-comptime PARALLEL_CHUNK = 262_144
-comptime MAX_WORKERS = 8
 
 
 def clip8(value: Int) -> Int8:
@@ -79,6 +75,36 @@ def gain32(src: I32Ptr, dst: I32Ptr, start: Int, end: Int, factor: Float64):
         i += 1
 
 
+def gain_dispatch(
+    src_addr: Int, dst_addr: Int, start: Int, end: Int, width: Int, factor: Float64
+):
+    """Width dispatch for one sample range; 1.2.0 has no capturing parallel body."""
+    if width == 1:
+        gain8(
+            I8Ptr(unsafe_from_address=src_addr),
+            I8Ptr(unsafe_from_address=dst_addr),
+            start,
+            end,
+            factor,
+        )
+    elif width == 2:
+        gain16(
+            I16Ptr(unsafe_from_address=src_addr),
+            I16Ptr(unsafe_from_address=dst_addr),
+            start,
+            end,
+            factor,
+        )
+    else:
+        gain32(
+            I32Ptr(unsafe_from_address=src_addr),
+            I32Ptr(unsafe_from_address=dst_addr),
+            start,
+            end,
+            factor,
+        )
+
+
 @export("mpd_gain")
 def mpd_gain(
     src_addr: Int, dst_addr: Int, n: Int, width: Int, factor: Float64
@@ -87,64 +113,7 @@ def mpd_gain(
         return
     if width != 1 and width != 2 and width != 4:
         return
-    @__parameter
-    def worker(chunk: Int):
-        var start = chunk * PARALLEL_CHUNK
-        var end = min(n, start + PARALLEL_CHUNK)
-        if width == 1:
-            gain8(
-                I8Ptr(unsafe_from_address=src_addr),
-                I8Ptr(unsafe_from_address=dst_addr),
-                start,
-                end,
-                factor,
-            )
-        elif width == 2:
-            gain16(
-                I16Ptr(unsafe_from_address=src_addr),
-                I16Ptr(unsafe_from_address=dst_addr),
-                start,
-                end,
-                factor,
-            )
-        else:
-            gain32(
-                I32Ptr(unsafe_from_address=src_addr),
-                I32Ptr(unsafe_from_address=dst_addr),
-                start,
-                end,
-                factor,
-            )
-
-    if n >= PARALLEL_THRESHOLD:
-        var chunks = (n + PARALLEL_CHUNK - 1) // PARALLEL_CHUNK
-        parallelize[worker](
-            chunks, min(chunks, min(MAX_WORKERS, num_physical_cores()))
-        )
-    elif width == 1:
-        gain8(
-            I8Ptr(unsafe_from_address=src_addr),
-            I8Ptr(unsafe_from_address=dst_addr),
-            0,
-            n,
-            factor,
-        )
-    elif width == 2:
-        gain16(
-            I16Ptr(unsafe_from_address=src_addr),
-            I16Ptr(unsafe_from_address=dst_addr),
-            0,
-            n,
-            factor,
-        )
-    else:
-        gain32(
-            I32Ptr(unsafe_from_address=src_addr),
-            I32Ptr(unsafe_from_address=dst_addr),
-            0,
-            n,
-            factor,
-        )
+    gain_dispatch(src_addr, dst_addr, 0, n, width, factor)
 
 
 def mix8(
@@ -225,6 +194,45 @@ def mix32(
         i += 1
 
 
+def mix_dispatch(
+    a_addr: Int,
+    b_addr: Int,
+    dst_addr: Int,
+    start: Int,
+    end: Int,
+    width: Int,
+    a_factor: Float64,
+):
+    """Width dispatch for one sample range; 1.2.0 has no capturing parallel body."""
+    if width == 1:
+        mix8(
+            I8Ptr(unsafe_from_address=a_addr),
+            I8Ptr(unsafe_from_address=b_addr),
+            I8Ptr(unsafe_from_address=dst_addr),
+            start,
+            end,
+            a_factor,
+        )
+    elif width == 2:
+        mix16(
+            I16Ptr(unsafe_from_address=a_addr),
+            I16Ptr(unsafe_from_address=b_addr),
+            I16Ptr(unsafe_from_address=dst_addr),
+            start,
+            end,
+            a_factor,
+        )
+    else:
+        mix32(
+            I32Ptr(unsafe_from_address=a_addr),
+            I32Ptr(unsafe_from_address=b_addr),
+            I32Ptr(unsafe_from_address=dst_addr),
+            start,
+            end,
+            a_factor,
+        )
+
+
 @export("mpd_mix")
 def mpd_mix(
     a_addr: Int,
@@ -238,70 +246,7 @@ def mpd_mix(
         return
     if width != 1 and width != 2 and width != 4:
         return
-    @__parameter
-    def worker(chunk: Int):
-        var start = chunk * PARALLEL_CHUNK
-        var end = min(n, start + PARALLEL_CHUNK)
-        if width == 1:
-            mix8(
-                I8Ptr(unsafe_from_address=a_addr),
-                I8Ptr(unsafe_from_address=b_addr),
-                I8Ptr(unsafe_from_address=dst_addr),
-                start,
-                end,
-                a_factor,
-            )
-        elif width == 2:
-            mix16(
-                I16Ptr(unsafe_from_address=a_addr),
-                I16Ptr(unsafe_from_address=b_addr),
-                I16Ptr(unsafe_from_address=dst_addr),
-                start,
-                end,
-                a_factor,
-            )
-        else:
-            mix32(
-                I32Ptr(unsafe_from_address=a_addr),
-                I32Ptr(unsafe_from_address=b_addr),
-                I32Ptr(unsafe_from_address=dst_addr),
-                start,
-                end,
-                a_factor,
-            )
-
-    if n >= PARALLEL_THRESHOLD:
-        var chunks = (n + PARALLEL_CHUNK - 1) // PARALLEL_CHUNK
-        parallelize[worker](
-            chunks, min(chunks, min(MAX_WORKERS, num_physical_cores()))
-        )
-    elif width == 1:
-        mix8(
-            I8Ptr(unsafe_from_address=a_addr),
-            I8Ptr(unsafe_from_address=b_addr),
-            I8Ptr(unsafe_from_address=dst_addr),
-            0,
-            n,
-            a_factor,
-        )
-    elif width == 2:
-        mix16(
-            I16Ptr(unsafe_from_address=a_addr),
-            I16Ptr(unsafe_from_address=b_addr),
-            I16Ptr(unsafe_from_address=dst_addr),
-            0,
-            n,
-            a_factor,
-        )
-    else:
-        mix32(
-            I32Ptr(unsafe_from_address=a_addr),
-            I32Ptr(unsafe_from_address=b_addr),
-            I32Ptr(unsafe_from_address=dst_addr),
-            0,
-            n,
-            a_factor,
-        )
+    mix_dispatch(a_addr, b_addr, dst_addr, 0, n, width, a_factor)
 
 
 def peak8(src: I8Ptr, n: Int) -> Int64:

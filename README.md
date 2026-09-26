@@ -99,13 +99,14 @@ faster.
 | high_pass_filter, 10 s stereo | 3.53 ms | 782.96 ms | 221.68x |
 | speedup 1.5x, 60 s stereo | 335.60 ms | 1254.22 ms | 3.74x |
 
-Gain, mixing, and peak detection use float64-width SIMD with scalar remainder
-handling. Gain and mixing buffers of at least 1,048,576 samples are split into
-independent 262,144-sample chunks across at most eight CPU workers; smaller
-inputs remain serial. The Python binding allocates the immutable result buffer
-directly and fills it during the native call, avoiding an intermediate writable
-buffer and final copy. Overlay copies the base once and mixes into that result
-instead of slicing and joining large temporary buffers.
+handling. Gain and mixing are a single streaming pass: each sample costs one
+convert, one multiply, a floor, two clamps, and one store, which is memory
+bandwidth rather than compute, so the kernels run serially and there is no
+thread-launch overhead to amortize. The Python binding allocates the
+immutable result buffer directly and fills it during the native call, avoiding
+an intermediate writable buffer and final copy. Overlay copies the base once
+and mixes into that result instead of slicing and joining large temporary
+buffers.
 
 No GPU path is included. These kernels perform fewer than two arithmetic
 operations per byte moved and are memory-bandwidth bound, so device transfer
