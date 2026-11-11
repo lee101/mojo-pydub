@@ -29,7 +29,7 @@ def gain8(src: I8Ptr, dst: I8Ptr, start: Int, end: Int, factor: Float64):
     var i = start
     var vector_end = end - (end - start) % W
     while i < vector_end:
-        var values = floor(src.load[width=W](i).cast[DType.float64]() * factor)
+        var values = floor(src.unsafe_load[width=W](i).cast[DType.float64]() * factor)
         values = max(
             SIMD[DType.float64, W](-128.0),
             min(SIMD[DType.float64, W](127.0), values),
@@ -46,7 +46,7 @@ def gain16(src: I16Ptr, dst: I16Ptr, start: Int, end: Int, factor: Float64):
     var i = start
     var vector_end = end - (end - start) % W
     while i < vector_end:
-        var values = floor(src.load[width=W](i).cast[DType.float64]() * factor)
+        var values = floor(src.unsafe_load[width=W](i).cast[DType.float64]() * factor)
         values = max(
             SIMD[DType.float64, W](-32768.0),
             min(SIMD[DType.float64, W](32767.0), values),
@@ -63,7 +63,7 @@ def gain32(src: I32Ptr, dst: I32Ptr, start: Int, end: Int, factor: Float64):
     var i = start
     var vector_end = end - (end - start) % W
     while i < vector_end:
-        var values = floor(src.load[width=W](i).cast[DType.float64]() * factor)
+        var values = floor(src.unsafe_load[width=W](i).cast[DType.float64]() * factor)
         values = max(
             SIMD[DType.float64, W](-2147483648.0),
             min(SIMD[DType.float64, W](2147483647.0), values),
@@ -128,8 +128,8 @@ def mix8(
     var i = start
     var vector_end = end - (end - start) % W
     while i < vector_end:
-        var values = floor(a.load[width=W](i).cast[DType.float64]() * a_factor)
-        values += b.load[width=W](i).cast[DType.float64]()
+        var values = floor(a.unsafe_load[width=W](i).cast[DType.float64]() * a_factor)
+        values += b.unsafe_load[width=W](i).cast[DType.float64]()
         values = max(
             SIMD[DType.float64, W](-128.0),
             min(SIMD[DType.float64, W](127.0), values),
@@ -154,8 +154,8 @@ def mix16(
     var i = start
     var vector_end = end - (end - start) % W
     while i < vector_end:
-        var values = floor(a.load[width=W](i).cast[DType.float64]() * a_factor)
-        values += b.load[width=W](i).cast[DType.float64]()
+        var values = floor(a.unsafe_load[width=W](i).cast[DType.float64]() * a_factor)
+        values += b.unsafe_load[width=W](i).cast[DType.float64]()
         values = max(
             SIMD[DType.float64, W](-32768.0),
             min(SIMD[DType.float64, W](32767.0), values),
@@ -180,8 +180,8 @@ def mix32(
     var i = start
     var vector_end = end - (end - start) % W
     while i < vector_end:
-        var values = floor(a.load[width=W](i).cast[DType.float64]() * a_factor)
-        values += b.load[width=W](i).cast[DType.float64]()
+        var values = floor(a.unsafe_load[width=W](i).cast[DType.float64]() * a_factor)
+        values += b.unsafe_load[width=W](i).cast[DType.float64]()
         values = max(
             SIMD[DType.float64, W](-2147483648.0),
             min(SIMD[DType.float64, W](2147483647.0), values),
@@ -255,7 +255,7 @@ def peak8(src: I8Ptr, n: Int) -> Int64:
     var i = 0
     var vector_end = n - n % W
     while i < vector_end:
-        var values = src.load[width=W](i).cast[DType.float64]()
+        var values = src.unsafe_load[width=W](i).cast[DType.float64]()
         peak = max(peak, Int64(max(values, -values).reduce_max()))
         i += W
     while i < n:
@@ -271,7 +271,7 @@ def peak16(src: I16Ptr, n: Int) -> Int64:
     var i = 0
     var vector_end = n - n % W
     while i < vector_end:
-        var values = src.load[width=W](i).cast[DType.float64]()
+        var values = src.unsafe_load[width=W](i).cast[DType.float64]()
         peak = max(peak, Int64(max(values, -values).reduce_max()))
         i += W
     while i < n:
@@ -287,7 +287,7 @@ def peak32(src: I32Ptr, n: Int) -> Int64:
     var i = 0
     var vector_end = n - n % W
     while i < vector_end:
-        var values = src.load[width=W](i).cast[DType.float64]()
+        var values = src.unsafe_load[width=W](i).cast[DType.float64]()
         peak = max(peak, Int64(max(values, -values).reduce_max()))
         i += W
     while i < n:
